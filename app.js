@@ -5,15 +5,27 @@ const bodyParser = require("body-parser");
 const ejs = require("ejs");
 // const bcrypt = require("bcrypt");
 // const saltRounds = 10;
-const sessions = require("express-session");
+const session = require("express-session");
 const passport = require("passport");
 const passportLocalMongoose = require("passport-local-mongoose");
 
 const app = express();
 
+// Server use stuff
 app.set('view engine', 'ejs');
 app.use(express.static("public"));
 app.use(bodyParser.urlencoded({extended: true}));
+
+// Passport session intialize
+app.use(session({
+    secret: 'The big secret',
+    resave: false,
+    saveUninitialized: false
+}));
+// Initialize Passport
+app.use(passport.initialize());
+app.use(passport.session());
+
 
 // Mongoose
 const mongoose = require("mongoose");
@@ -21,21 +33,20 @@ const encrypytion = require("mongoose-encryption");
 // Initialize Mongoose
 const mongoLocal = `mongodb://localhost:27017/userDB`
 mongoose.connect(mongoLocal, {
-    useNewUrlParser: true,  useUnifiedTopology: true, useFindAndModify: false
+    useNewUrlParser: true,  useUnifiedTopology: true, useFindAndModify: false, useCreateIndex: true
 });
-
 
 
 // Export Mongoose, Initialize Model
 const User = require("./models/User");
 
+// Passport with Mongoose in models
+// CHANGE: USE "createStrategy" INSTEAD OF "authenticate"
+passport.use(User.createStrategy());
+ 
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
 
-
-// Server stuff
-
-app.listen(3000, function() {
-    console.log("Server started on port 3000");
-});
 
 // Home route
 app.route("/")
@@ -43,6 +54,21 @@ app.route("/")
 .get(function(req,res) {
     res.render("Home");
 });
+
+
+// Secrets route
+app.route("/secrets")
+// Secrets route - Get Method
+.get(function(req,res) {
+    if (req.isAuthenticated()){
+        res.render("secrets");
+        // res.render("secrets");
+    } else {
+        console.log("User tried to access withtout authentication");
+        res.redirect("/login");
+    }
+});
+
 
 // Login route
 app.route("/login")
@@ -52,6 +78,28 @@ app.route("/login")
 })
 // Login route - Post Method
 .post(function(req,res) {
+
+    // Setup user object
+    const user = new User ({
+        username : req.body.username,
+        password: req.body.password
+    });
+    // Passport Login
+    req.login(user, function(err) {
+        if (err) {
+            console.log("Error logging in : " + user.username);
+            res.redirect("/login");
+        } else {
+            // res.redirect("/secrets");
+            passport.authenticate("local")(req, res, function() {
+                res.redirect("/secrets");
+            });
+            console.log("Logging in: " + user.username);
+        }
+    });
+
+
+
     // const username = req.body.username;
     // const password = req.body.password;
     // // Email comes from the database field
@@ -75,6 +123,8 @@ app.route("/login")
 });
 
 
+
+
 // Register route
 app.route("/register")
 // Register route - Get Method
@@ -83,6 +133,22 @@ app.route("/register")
 })
 // Register route - Post Method
 .post(function(req,res) {
+    const email = req.body.username;
+
+    // Passport Register
+    User.register({ username: email }, req.body.password, function(err, results) {
+        // Authenticate using passport
+        if (!err) {
+            console.log("Successfully registed: " + email);
+            passport.authenticate("local")(req, res, function() {
+                res.redirect("/secrets");
+            });
+        } else if (err) {
+            console.log("Error registering: " + email + " " + err);
+            res.redirect("/register");
+        }
+    });
+
     // // BCRYPT
     // bcrypt.hash(req.body.password, saltRounds, function(err, hash) {
     //     // Store hash in your password DB.
@@ -105,7 +171,19 @@ app.route("/register")
     //         }
     //     });
     // });
-
     
 });
 
+// Logout route
+app.route("/logout")
+// Logout - GET METHOD
+.get(function(req,res) {
+        req.logout();
+        res.redirect('/');
+});
+
+
+// Server stuff
+app.listen(3000, function() {
+    console.log("Server started on port 3000");
+});
