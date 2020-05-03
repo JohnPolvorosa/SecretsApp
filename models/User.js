@@ -12,7 +12,8 @@ const findOrCreate = require("mongoose-findorcreate");
 const userSchema = new mongoose.Schema({
     email: String,
     password: String,
-    googleId: String
+    googleId: String,
+    secret: String
 });
 
 // Passport thing

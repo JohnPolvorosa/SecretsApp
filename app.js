@@ -104,13 +104,47 @@ app.route("/auth/google/secrets")
 app.route("/secrets")
 // Secrets route - Get Method
 .get(function(req,res) {
-    if (req.isAuthenticated()){
-        res.render("secrets");
-        // res.render("secrets");
+    User.find({"secret": {$ne:null} }, function(err,results) {
+        if (err) {
+            console.log(err);
+        } else {
+            if (results) {
+                res.render("secrets", {usersWitheSecrets: results});
+            }
+        }
+    });
+});
+
+
+// Submit Route
+app.route("/submit")
+// Submit Route - Get METHOD
+.get(function(req,res) {
+    //
+    if (req.isAuthenticated()) {
+        res.render("submit");
     } else {
-        console.log("User tried to access withtout authentication");
+        console.log("User tried to submit without authentication");
         res.redirect("/login");
     }
+})
+// Submit Route - POST METHOD
+.post(function(req,res) {
+    // Grab user input from submit page
+    const submittedSecret = req.body.secret;
+    // Find user    
+    console.log(req.user.id);
+    User.findById( req.user.id, function(err, results) {
+        if (results) {
+            results.secret = submittedSecret;
+            results.save(function() {
+                console.log("User: ", req.user.id, " submitted seret: ", submittedSecret);
+                res.redirect("/secrets");
+            });
+        } else {
+            console.log("Failed to submit user secret: " + req.user);
+        }
+    });
 });
 
 
