@@ -8,6 +8,8 @@ const ejs = require("ejs");
 const session = require("express-session");
 const passport = require("passport");
 const passportLocalMongoose = require("passport-local-mongoose");
+const GoogleStrategy = require( 'passport-google-oauth2' ).Strategy;
+const findOrCreate = require("mongoose-findorcreate");
 
 const app = express();
 
@@ -44,8 +46,36 @@ const User = require("./models/User");
 // CHANGE: USE "createStrategy" INSTEAD OF "authenticate"
 passport.use(User.createStrategy());
  
-passport.serializeUser(User.serializeUser());
-passport.deserializeUser(User.deserializeUser());
+
+// SERIALIZE ERROR FIX - http://www.passportjs.org/docs/oauth2-api/
+passport.serializeUser(function(user, done) {
+    done(null, user.id);
+});
+  
+passport.deserializeUser(function(id, done) {
+    User.findById(id, function(err, user) {
+        done(err, user);
+    });
+});
+
+
+// GOOGLE OAUTH
+passport.use(new GoogleStrategy({
+    clientID: process.env.CLIENT_ID,
+    clientSecret: process.env.CLIENT_SECRET,
+    callbackURL: "http://localhost:3000/auth/google/secrets",
+    userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo",
+    passReqToCallback   : true
+  },
+  // callback
+  function(request, accessToken, refreshToken, profile, done) {
+      console.log(profile);
+    User.findOrCreate({ googleId: profile.id }, function (err, user) {
+      return done(err, user);
+    });
+  }
+));
+
 
 
 // Home route
@@ -55,6 +85,20 @@ app.route("/")
     res.render("Home");
 });
 
+// AUTH GOOGLE ROUTE
+// app.route("/auth/google")
+app.route("/auth/google")
+// AUTH GOOGLE ROUTE - GET METHOD
+.get(
+    passport.authenticate("google", { scope: ["profile"]})
+);
+
+// AUTH GOOGLE ROUTE Authenticate
+app.route("/auth/google/secrets")
+.get(passport.authenticate( "google", {
+    successRedirect: "/secrets",
+    failureRedirect: "/login"
+}));
 
 // Secrets route
 app.route("/secrets")
